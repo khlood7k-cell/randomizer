@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { ListData } from '../types';
 import { Button } from './Button';
-import { Plus, List, Trash2, Settings as SettingsIcon, PanelLeftClose, X, Check } from 'lucide-react';
+import { Plus, List, Trash2, Settings as SettingsIcon, PanelLeftClose, X, Check, GitMerge } from 'lucide-react';
 
 interface SidebarProps {
   lists: ListData[];
@@ -13,6 +13,7 @@ interface SidebarProps {
   onCreate: () => void;
   onDelete: (id: string) => void;
   onOpenSettings: () => void;
+  onOpenMerge: () => void;
 }
 
 const SidebarItem: React.FC<{
@@ -87,7 +88,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onSelect, 
   onCreate, 
   onDelete,
-  onOpenSettings
+  onOpenSettings,
+  onOpenMerge
 }) => {
   return (
     <>
@@ -120,10 +122,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <PanelLeftClose size={20} />
             </button>
           </div>
-          <Button onClick={onCreate} className="w-full justify-start gap-2 shadow-sm bg-theme text-white border-none" variant="primary">
-            <Plus size={18} />
-            New List
-          </Button>
+          
+          <div className="grid grid-cols-2 gap-2">
+            <Button onClick={onCreate} className="justify-start gap-2 shadow-sm bg-theme text-white border-none py-2.5 px-3" variant="primary">
+              <Plus size={16} />
+              <span className="text-sm">New</span>
+            </Button>
+            <Button 
+              onClick={onOpenMerge} 
+              disabled={lists.length < 2}
+              className="justify-start gap-2 shadow-sm bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-none py-2.5 px-3 hover:bg-slate-200 dark:hover:bg-slate-700 disabled:opacity-30" 
+              variant="secondary"
+            >
+              <GitMerge size={16} />
+              <span className="text-sm">Merge</span>
+            </Button>
+          </div>
         </div>
 
         <div className="flex-1 overflow-y-auto p-4 space-y-1">

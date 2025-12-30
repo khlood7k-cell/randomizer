@@ -1,9 +1,10 @@
 
 import React, { useState, useEffect } from 'react';
-import { AppState, ListData, Settings } from './types';
+import { AppState, ListData, Settings, NameItem } from './types';
 import { Sidebar } from './components/Sidebar';
 import { ListManager } from './components/ListManager';
 import { SettingsModal } from './components/SettingsModal';
+import { MergeModal } from './components/MergeModal';
 import { HashRouter as Router } from 'react-router-dom';
 import { Sparkles, PanelLeftOpen } from 'lucide-react';
 
@@ -20,6 +21,7 @@ const DEFAULT_SETTINGS: Settings = {
 const App: React.FC = () => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(window.innerWidth > 1024);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isMergeModalOpen, setIsMergeModalOpen] = useState(false);
   
   const [state, setState] = useState<AppState>(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -79,13 +81,44 @@ const App: React.FC = () => {
   };
 
   const handleDeleteList = (id: string) => {
-    // The sidebar handles confirmation now, but we double check here
     setState(prev => {
       const newLists = prev.lists.filter(l => l.id !== id);
       return {
         ...prev,
         lists: newLists,
         activeListId: prev.activeListId === id ? null : prev.activeListId
+      };
+    });
+  };
+
+  const handleMergeLists = (id1: string, id2: string, mode: 'add' | 'replace', newTitle: string) => {
+    setState(prev => {
+      const list1 = prev.lists.find(l => l.id === id1);
+      const list2 = prev.lists.find(l => l.id === id2);
+      
+      if (!list1 || !list2) return prev;
+
+      const mergedItems: NameItem[] = [
+        ...list1.items.map(item => ({ ...item, id: crypto.randomUUID(), isPicked: false, pickedAt: undefined })),
+        ...list2.items.map(item => ({ ...item, id: crypto.randomUUID(), isPicked: false, pickedAt: undefined }))
+      ];
+
+      const newList: ListData = {
+        id: crypto.randomUUID(),
+        title: newTitle,
+        items: mergedItems,
+        createdAt: Date.now()
+      };
+
+      let newLists = [newList, ...prev.lists];
+      if (mode === 'replace') {
+        newLists = newLists.filter(l => l.id !== id1 && l.id !== id2);
+      }
+
+      return {
+        ...prev,
+        lists: newLists,
+        activeListId: newList.id
       };
     });
   };
@@ -151,6 +184,7 @@ const App: React.FC = () => {
           onCreate={handleCreateList}
           onDelete={handleDeleteList}
           onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenMerge={() => setIsMergeModalOpen(true)}
         />
 
         <main className={`transition-all duration-300 ease-in-out min-h-screen ${
@@ -199,6 +233,14 @@ const App: React.FC = () => {
             settings={state.settings}
             onUpdate={handleUpdateSettings}
             onClose={() => setIsSettingsOpen(false)}
+          />
+        )}
+
+        {isMergeModalOpen && (
+          <MergeModal
+            lists={state.lists}
+            onMerge={handleMergeLists}
+            onClose={() => setIsMergeModalOpen(false)}
           />
         )}
 
