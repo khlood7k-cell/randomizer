@@ -2,15 +2,19 @@
 export interface NameItem {
   id: string;
   value: string;
+  answer?: string; // Optional answer for question tests
   isPicked: boolean;
   pickedAt?: number;
 }
+
+export type ListType = 'randomizer' | 'todo' | 'question-test';
 
 export interface ListData {
   id: string;
   title: string;
   items: NameItem[];
   createdAt: number;
+  type: ListType;
 }
 
 export type ThemeColor = 
@@ -25,8 +29,11 @@ export interface Settings {
   showTimestamps: boolean;
 }
 
+export type ViewMode = 'welcome' | 'randomizer' | 'todo' | 'question-test';
+
 export interface AppState {
   lists: ListData[];
   activeListId: string | null;
   settings: Settings;
+  viewMode: ViewMode;
 }
