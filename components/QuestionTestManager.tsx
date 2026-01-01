@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { ListData, NameItem, Settings } from '../types';
 import { 
   Plus, 
@@ -11,11 +11,12 @@ import {
   History,
   Target,
   Eye,
-  EyeOff,
   Pencil,
   Check,
   X,
-  RotateCcw
+  RotateCcw,
+  Play,
+  Award
 } from 'lucide-react';
 import { suggestNames } from '../services/geminiService';
 
@@ -68,6 +69,7 @@ const QuestionItem: React.FC<{
         <div className="flex items-start justify-between">
           <div className="flex-1 min-w-0">
             <span className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 truncate block">{item.value}</span>
+            <span className="text-[9px] text-slate-400 block truncate">{item.answer}</span>
           </div>
           <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0 ml-2">
             <button onClick={() => setIsEditing(true)} className="p-0.5 text-slate-300 hover:text-theme">
@@ -86,11 +88,18 @@ const QuestionItem: React.FC<{
 export const QuestionTestManager: React.FC<QuestionTestManagerProps> = ({ list, settings, onUpdate }) => {
   const [questionInput, setQuestionInput] = useState('');
   const [answerInput, setAnswerInput] = useState('');
-  const [isSpinning, setIsSpinning] = useState(false);
   const [winner, setWinner] = useState<NameItem | null>(null);
-  const [shuffleText, setShuffleText] = useState('');
   const [showAnswer, setShowAnswer] = useState(false);
   const [isSuggesting, setIsSuggesting] = useState(false);
+  
+  // Exam State
+  const [isExamMode, setIsExamMode] = useState(false);
+  const [shuffledQuestions, setShuffledQuestions] = useState<NameItem[]>([]);
+  const [examIndex, setExamIndex] = useState(0);
+  const [examScore, setExamScore] = useState(0);
+  const [selectedExamAnswer, setSelectedExamAnswer] = useState<string | null>(null);
+  const [isAnswerCorrect, setIsAnswerCorrect] = useState<boolean | null>(null);
+  const [examFinished, setExamFinished] = useState(false);
   
   const questionInputRef = useRef<HTMLInputElement>(null);
 
@@ -142,14 +151,9 @@ export const QuestionTestManager: React.FC<QuestionTestManagerProps> = ({ list, 
       if (settings.autoResetPool) handleReset();
       return;
     }
-
-    // Pick a winner instantly
     const finalWinner = availableItems[Math.floor(Math.random() * availableItems.length)];
-    
     setWinner(finalWinner);
-    setIsSpinning(false);
     setShowAnswer(false);
-    
     onUpdate({
       ...list,
       items: list.items.map(item => 
@@ -165,6 +169,9 @@ export const QuestionTestManager: React.FC<QuestionTestManagerProps> = ({ list, 
     });
     setWinner(null);
     setShowAnswer(false);
+    setIsExamMode(false);
+    setExamFinished(false);
+    setShuffledQuestions([]);
   };
 
   const handleDeleteItem = (id: string) => {
@@ -180,6 +187,142 @@ export const QuestionTestManager: React.FC<QuestionTestManagerProps> = ({ list, 
       items: list.items.map(item => item.id === id ? { ...item, value: newQ, answer: newA } : item)
     });
   };
+
+  // Exam Logic
+  const startExam = () => {
+    if (list.items.length < 3) return;
+    
+    // Shuffle the questions for the exam
+    const shuffled = [...list.items].sort(() => Math.random() - 0.5);
+    
+    setShuffledQuestions(shuffled);
+    setIsExamMode(true);
+    setExamIndex(0);
+    setExamScore(0);
+    setSelectedExamAnswer(null);
+    setIsAnswerCorrect(null);
+    setExamFinished(false);
+  };
+
+  const currentExamQuestion = shuffledQuestions[examIndex];
+  
+  // Generate multiple choice options
+  const examOptions = useMemo(() => {
+    if (!isExamMode || !currentExamQuestion) return [];
+    
+    const correctAnswer = currentExamQuestion.answer || '';
+    const otherAnswers = list.items
+      .filter(item => item.id !== currentExamQuestion.id)
+      .map(item => item.answer || 'No answer provided');
+    
+    // Pick 2 random distractors from the entire pool
+    const shuffledOthers = [...otherAnswers].sort(() => Math.random() - 0.5);
+    const distractors = shuffledOthers.slice(0, 2);
+    
+    return [correctAnswer, ...distractors].sort(() => Math.random() - 0.5);
+  }, [isExamMode, examIndex, shuffledQuestions, list.items]);
+
+  const handleSelectAnswer = (answer: string) => {
+    if (selectedExamAnswer !== null) return;
+    
+    setSelectedExamAnswer(answer);
+    const correct = answer === currentExamQuestion.answer;
+    setIsAnswerCorrect(correct);
+    if (correct) setExamScore(prev => prev + 1);
+    
+    setTimeout(() => {
+      if (examIndex < shuffledQuestions.length - 1) {
+        setExamIndex(prev => prev + 1);
+        setSelectedExamAnswer(null);
+        setIsAnswerCorrect(null);
+      } else {
+        setExamFinished(true);
+      }
+    }, 1500);
+  };
+
+  if (isExamMode) {
+    return (
+      <div className="w-full space-y-3 max-w-xl mx-auto animate-in fade-in duration-300">
+        <div className="bg-white dark:bg-slate-900 rounded-xl p-6 shadow-sm border border-slate-100 dark:border-slate-800 text-center">
+          <div className="flex items-center justify-between mb-8">
+            <button onClick={() => setIsExamMode(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
+              <X size={20} />
+            </button>
+            <div className="px-3 py-1 bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400 rounded-full text-[10px] font-black uppercase tracking-widest">
+              Exam Mode • Question {examIndex + 1} of {shuffledQuestions.length}
+            </div>
+            <div className="w-5" />
+          </div>
+
+          {!examFinished ? (
+            <div className="space-y-8 py-4">
+              <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest mb-2">The Question</p>
+                <h2 className="text-2xl font-black text-slate-800 dark:text-white leading-tight">{currentExamQuestion.value}</h2>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 max-w-md mx-auto">
+                {examOptions.map((opt, i) => {
+                  const isSelected = selectedExamAnswer === opt;
+                  const isCorrect = opt === currentExamQuestion.answer;
+                  
+                  let btnClass = "w-full p-4 rounded-xl text-sm font-bold border-2 transition-all flex items-center justify-between ";
+                  if (selectedExamAnswer === null) {
+                    btnClass += "border-slate-100 dark:border-slate-800 hover:border-violet-300 dark:hover:border-violet-700 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800";
+                  } else if (isSelected) {
+                    btnClass += isCorrect ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600" : "border-rose-500 bg-rose-50 dark:bg-rose-900/20 text-rose-600";
+                  } else {
+                    btnClass += isCorrect ? "border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 opacity-50" : "border-slate-100 dark:border-slate-800 opacity-30 text-slate-400";
+                  }
+
+                  return (
+                    <button 
+                      key={i}
+                      disabled={selectedExamAnswer !== null}
+                      onClick={() => handleSelectAnswer(opt)}
+                      className={btnClass}
+                    >
+                      <span className="truncate pr-4">{opt}</span>
+                      {selectedExamAnswer !== null && isCorrect && <Check size={18} className="flex-shrink-0" />}
+                      {isSelected && !isCorrect && <X size={18} className="flex-shrink-0" />}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedExamAnswer !== null && (
+                <p className={`text-xs font-bold uppercase tracking-widest animate-in fade-in slide-in-from-bottom-2 ${isAnswerCorrect ? 'text-emerald-500' : 'text-rose-500'}`}>
+                  {isAnswerCorrect ? 'Correct!' : 'Incorrect Answer'}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="py-12 space-y-6 animate-in zoom-in-95 duration-500">
+               <div className="w-20 h-20 bg-violet-100 dark:bg-violet-900/40 rounded-full flex items-center justify-center mx-auto text-violet-600">
+                  <Award size={40} />
+               </div>
+               <div>
+                 <h2 className="text-3xl font-black text-slate-800 dark:text-white mb-2">Test Complete!</h2>
+                 <p className="text-slate-500 dark:text-slate-400 font-medium italic">You've reached the end of the shuffled exam.</p>
+               </div>
+               <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700 max-w-xs mx-auto">
+                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Final Score</p>
+                  <p className="text-5xl font-black text-violet-600">{Math.round((examScore / shuffledQuestions.length) * 100)}%</p>
+                  <p className="text-xs font-bold text-slate-400 mt-2">{examScore} correct out of {shuffledQuestions.length}</p>
+               </div>
+               <button 
+                 onClick={() => setIsExamMode(false)}
+                 className="px-8 py-3 bg-violet-600 text-white rounded-xl font-bold text-sm shadow-lg hover:brightness-110 active:scale-95 transition-all"
+               >
+                 BACK TO POOL
+               </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full space-y-3 max-w-xl mx-auto">
@@ -207,26 +350,31 @@ export const QuestionTestManager: React.FC<QuestionTestManagerProps> = ({ list, 
               </button>
             </div>
           </div>
-          <button 
-            onClick={handleReset}
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-md transition-colors"
-          >
-            <RefreshCw size={14} />
-          </button>
+          <div className="flex items-center gap-1">
+            {list.items.length >= 3 && (
+              <button 
+                onClick={startExam}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-600 text-white rounded-md font-bold text-[10px] hover:brightness-110 active:scale-95 transition-all shadow-sm"
+              >
+                <Play size={10} fill="currentColor" /> START TEST
+              </button>
+            )}
+            <button 
+              onClick={handleReset}
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-md transition-colors"
+            >
+              <RefreshCw size={14} />
+            </button>
+          </div>
         </div>
 
         {/* Compact Result Area */}
-        <div className={`relative min-h-[110px] rounded-lg transition-all duration-300 border flex flex-col items-center justify-center px-4 py-4 ${isSpinning || winner ? 'bg-violet-600 border-violet-600 text-white' : 'bg-slate-50 dark:bg-slate-800/50 border-transparent'}`}>
-          {isSpinning ? (
-            <div className="text-center">
-              <p className="text-white/60 text-[8px] font-bold uppercase tracking-widest mb-1">Selecting Question...</p>
-              <h2 className="text-xl font-black italic truncate max-w-full">{shuffleText}</h2>
-            </div>
-          ) : winner ? (
+        <div className={`relative min-h-[110px] rounded-lg transition-all duration-300 border flex flex-col items-center justify-center px-4 py-4 ${winner ? 'bg-violet-600 border-violet-600 text-white' : 'bg-slate-50 dark:bg-slate-800/50 border-transparent'}`}>
+          {winner ? (
             <div className="text-center animate-in zoom-in-95 duration-200 w-full flex flex-col items-center">
                <div className="flex items-center justify-center gap-2 mb-1">
                   <HelpCircle size={14} className="text-white/90" />
-                  <p className="text-white/80 text-[8px] font-bold uppercase tracking-widest">Question</p>
+                  <p className="text-white/80 text-[8px] font-bold uppercase tracking-widest">Random Review</p>
                </div>
                <h2 className="text-xl font-bold italic tracking-tight truncate w-full mb-3">{winner.value}</h2>
                
@@ -285,7 +433,7 @@ export const QuestionTestManager: React.FC<QuestionTestManagerProps> = ({ list, 
                   type="text"
                   value={answerInput}
                   onChange={(e) => setAnswerInput(e.target.value)}
-                  placeholder="The answer (optional)..."
+                  placeholder="The answer..."
                   className="flex-1 px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg focus:ring-1 focus:ring-theme outline-none text-[11px] font-semibold"
                 />
                 <button type="submit" className="p-1.5 bg-theme text-white rounded-lg hover:brightness-110 active:scale-95 transition-all">
